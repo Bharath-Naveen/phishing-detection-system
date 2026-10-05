@@ -138,6 +138,53 @@ Pre-registered in `docs/rebuild/TUNING_PLAN.md`. Every number below replays the 
 Legitimate pages: official brand URLs, popular homepages (Tranco), hard legitimate and curated legitimate URLs (all captures, failed ones included). Fresh phishing: newest PhishStats URLs whose capture succeeded and whose host is not itself a top-10K site. Feed labels mean reported as phishing; some pages were already replaced by harmless content when captured.
 
 
+## Layer 1 against a free local LLM (same URLs, same machine)
+
+From `phishguard baseline-llm`, which replays saved answers with no network and no API key. The LLM is a yardstick, not part of the product. `llama3.2:3b` (2.0 GB download, run with Ollama 0.35.1) was asked once, on 2026-10-05, about a seeded random sample of 2,000 held-out test URLs (929 phishing). Zero-shot, temperature 0, one fixed prompt that was not edited after seeing answers. Hardware for both: Intel(R) Xeon(R) Processor @ 2.10GHz (2 cores), CPU only. Recording: `data/evaluation/frozen/llm_baseline_llama3_2_3b.jsonl.gz` (sha256 `ac2b37194db4`). Raw values: `metrics/results/llm_baseline.json`.
+
+|  | Precision | Recall | F1 | F1 95% CI | FPR | Time per URL p50 | p95 |
+|---|---|---|---|---|---|---|---|
+| Layer 1 (app threshold) | 0.752 | 0.860 | 0.802 | 0.783 to 0.822 | 24.6% | 11.4 ms | 15.5 ms |
+| llama3.2:3b, zero-shot | 0.868 | 0.501 | 0.635 | 0.606 to 0.664 | 6.6% | 741.6 ms | 1,447.3 ms |
+
+F1 difference (Layer 1 minus LLM): +0.167, 95% CI +0.134 to +0.202 (paired bootstrap, 1,000 resamples). The LLM took 65 times as long per URL (medians). Both right on 1,169 URLs, only Layer 1 right on 437, only the LLM right on 296, both wrong on 98. LLM answers that were neither word: 8 (counted as legitimate).
+
+This is one small open model with one prompt. It says nothing about larger hosted models, which published work puts higher on other datasets.
+
+## Layer 1 as a first filter (cascade)
+
+From `phishguard cascade`: arithmetic on the saved scores of all 147,702 held-out test URLs (`metrics/results/heldout_scores.csv.gz`), no network. Layer 1 settles a URL when its calibrated score is outside the band; URLs inside the band go to a slow second step. Every band is shown and none is picked as the operating point, because picking one from these rows would be choosing on the test set. Raw values: `metrics/results/cascade.json`.
+
+| Unsure band | Sent to slow step | Slow calls avoided | Layer 1 wrong on what it settles | Phishing waved through | Legitimate blocked outright | Time per URL with page capture | Time per URL with local LLM |
+|---|---|---|---|---|---|---|---|
+| none (Layer 1 decides all) | 0.0% | 100.0% | 19.5% | 14.1% | 24.1% | 16 ms | 16 ms |
+| 0.45 to 0.55 | 1.3% | 98.7% | 19.2% | 13.0% | 24.1% | 104 ms | 25 ms |
+| 0.40 to 0.60 | 2.1% | 97.9% | 18.9% | 13.0% | 23.4% | 155 ms | 31 ms |
+| 0.35 to 0.65 | 13.2% | 86.8% | 15.4% | 10.6% | 15.8% | 908 ms | 114 ms |
+| 0.30 to 0.70 | 19.9% | 80.1% | 13.9% | 9.2% | 12.8% | 1,359 ms | 163 ms |
+| 0.25 to 0.75 | 27.1% | 72.9% | 12.9% | 6.1% | 12.3% | 1,848 ms | 217 ms |
+| 0.20 to 0.80 | 30.1% | 69.9% | 12.5% | 4.9% | 12.0% | 2,050 ms | 239 ms |
+| 0.15 to 0.85 | 33.5% | 66.5% | 12.2% | 3.6% | 12.0% | 2,282 ms | 264 ms |
+| 0.10 to 0.90 | 53.8% | 46.2% | 9.7% | 1.8% | 6.8% | 3,659 ms | 415 ms |
+| 0.05 to 0.95 | 67.0% | 33.0% | 9.9% | 0.9% | 5.3% | 4,552 ms | 513 ms |
+
+Time per URL = Layer 1 p50 (15.7 ms) + share sent on x slow step p50 (page capture 6,767 ms, capture (Playwright) + full analysis, one URL at a time, GitHub-hosted runner; local LLM 742 ms, llama3.2:3b on Intel(R) Xeon(R) Processor @ 2.10GHz (2 cores), CPU only). An estimate from measured medians. "Phishing waved through" and "legitimate blocked outright" are shares of all phishing / all legitimate test URLs that Layer 1 gets wrong without a second look.
+
+**Measured end to end with the recorded LLM** (llama3.2:3b, 2,000 URLs): Layer 1 answers first and the LLM's saved answer is used only inside the band. LLM on every URL: F1 0.635 at 842 ms per URL (mean).
+
+| Unsure band | LLM calls avoided | Precision | Recall | F1 | FPR | Time per URL (mean, measured) | Faster than LLM on everything |
+|---|---|---|---|---|---|---|---|
+| none (Layer 1 decides all) | 100.0% | 0.752 | 0.860 | 0.802 | 24.6% | 12 ms | 71.3x |
+| 0.45 to 0.55 | 98.6% | 0.752 | 0.864 | 0.804 | 24.7% | 22 ms | 37.5x |
+| 0.40 to 0.60 | 97.8% | 0.756 | 0.860 | 0.805 | 24.1% | 29 ms | 29.2x |
+| 0.35 to 0.65 | 87.1% | 0.795 | 0.801 | 0.798 | 17.9% | 115 ms | 7.3x |
+| 0.30 to 0.70 | 81.6% | 0.806 | 0.770 | 0.787 | 16.1% | 156 ms | 5.4x |
+| 0.25 to 0.75 | 73.9% | 0.805 | 0.766 | 0.785 | 16.2% | 215 ms | 3.9x |
+| 0.20 to 0.80 | 70.0% | 0.808 | 0.774 | 0.791 | 16.0% | 248 ms | 3.4x |
+| 0.15 to 0.85 | 65.9% | 0.802 | 0.781 | 0.792 | 16.7% | 280 ms | 3.0x |
+| 0.10 to 0.90 | 45.2% | 0.839 | 0.667 | 0.743 | 11.1% | 438 ms | 1.9x |
+| 0.05 to 0.95 | 32.2% | 0.833 | 0.600 | 0.697 | 10.5% | 544 ms | 1.5x |
+
 ## Earlier baseline
 
 The pre-rebuild audit (leaky split, scheme artifact, stale calibrator) is kept for comparison in `metrics/audit_baseline/` and at git tag `audit-baseline-2026-09-29`. Its numbers describe the old code and must not be quoted for the current system.

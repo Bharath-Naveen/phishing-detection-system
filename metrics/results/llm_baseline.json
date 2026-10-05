@@ -1,0 +1,120 @@
+{
+ "generated_utc": "2026-10-05T02:20:46+00:00",
+ "command": "phishguard baseline-llm",
+ "recording_file": "data/evaluation/frozen/llm_baseline_llama3_2_3b.jsonl.gz",
+ "recording_sha256": "ac2b37194db44e45f1f294285d86379b7ca1340c9c7bc2a07e21b07b3c408d9c",
+ "recording": {
+  "bundle_sha256": "9758fb0f13fd6cbe869d6ae6021314c3c89d7693fb9eedb36bc90499c9fa0a70",
+  "command": "phishguard baseline-llm --record --n 2000 --model llama3.2:3b",
+  "git_commit": "47d563316cde85a9cd0e1cb715c6b656659f9a18",
+  "hardware": "Intel(R) Xeon(R) Processor @ 2.10GHz (2 cores), CPU only",
+  "max_url_chars": 500,
+  "model": "llama3.2:3b",
+  "model_details": {
+   "context_length": 131072,
+   "embedding_length": 3072,
+   "families": [
+    "llama"
+   ],
+   "family": "llama",
+   "format": "gguf",
+   "parameter_size": "3.2B",
+   "parent_model": "",
+   "quantization_level": "Q4_K_M"
+  },
+  "model_digest": "a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72",
+  "model_size_bytes": 2019393189,
+  "n": 2000,
+  "ollama_version": "0.35.1",
+  "options": {
+   "num_predict": 8,
+   "seed": 42,
+   "temperature": 0
+  },
+  "primary_model": "xgboost",
+  "recorded_utc": "2026-10-05T02:16:38+00:00",
+  "sample": "seeded simple random sample (seed 42) of the held-out test rows",
+  "system_prompt": "You are a security analyst. You will be shown one URL. Decide whether it is a phishing URL or a legitimate URL, judging only from the URL text. Answer with exactly one word: phishing or legitimate.",
+  "test_csv_sha256": "360c30d2cc897ce9bdf5ad70ea7ffd7ffda212f69711aa4e5f5420ef0dad2e82",
+  "test_rows": 147702,
+  "user_template": "URL: {url}"
+ },
+ "sample": {
+  "n": 2000,
+  "phishing": 929,
+  "legitimate": 1071
+ },
+ "layer1": {
+  "rule": "calibrated probability >= 0.5 (the app's threshold)",
+  "precision": 0.7516462841015993,
+  "recall": 0.860064585575888,
+  "f1": 0.8022088353413654,
+  "false_positive_rate": 0.24649859943977592,
+  "accuracy": 0.803,
+  "confusion_matrix": {
+   "tn": 807,
+   "fp": 264,
+   "fn": 130,
+   "tp": 799
+  },
+  "n": 2000,
+  "f1_ci95": [
+   0.7826497166990188,
+   0.8216420367736158
+  ],
+  "latency_ms": {
+   "p50": 11.3625,
+   "p95": 15.49395,
+   "mean": 11.8100545
+  }
+ },
+ "llm": {
+  "rule": "zero-shot, one word; unparsed answers count as legitimate",
+  "precision": 0.8675373134328358,
+  "recall": 0.5005382131324004,
+  "f1": 0.6348122866894198,
+  "false_positive_rate": 0.06629318394024276,
+  "accuracy": 0.7325,
+  "confusion_matrix": {
+   "tn": 1000,
+   "fp": 71,
+   "fn": 464,
+   "tp": 465
+  },
+  "n": 2000,
+  "f1_ci95": [
+   0.6061722876476322,
+   0.6644654262272092
+  ],
+  "latency_ms": {
+   "p50": 741.6,
+   "p95": 1447.3149999999998,
+   "mean": 842.21935
+  },
+  "unparsed_answers": 8,
+  "prompt_tokens_mean": 86.2165,
+  "answer_tokens_mean": 3.0225
+ },
+ "layer1_minus_llm_f1": {
+  "difference": 0.16739654865194564,
+  "ci95": [
+   0.1335673876959709,
+   0.20228408466431078
+  ],
+  "n_boot": 1000,
+  "method": "paired bootstrap over the same URLs"
+ },
+ "speed": {
+  "same_machine": true,
+  "hardware": "Intel(R) Xeon(R) Processor @ 2.10GHz (2 cores), CPU only",
+  "llm_over_layer1_p50": 65.26732673267327,
+  "llm_over_layer1_mean": 71.31375642678024,
+  "note": "both timed in the recording run, one URL at a time, warm, CPU only"
+ },
+ "agreement": {
+  "both_right": 1169,
+  "only_layer1_right": 437,
+  "only_llm_right": 296,
+  "both_wrong": 98
+ }
+}

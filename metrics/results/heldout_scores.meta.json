@@ -1,0 +1,12 @@
+{
+ "test_csv_sha256": "360c30d2cc897ce9bdf5ad70ea7ffd7ffda212f69711aa4e5f5420ef0dad2e82",
+ "bundle_sha256": "9758fb0f13fd6cbe869d6ae6021314c3c89d7693fb9eedb36bc90499c9fa0a70",
+ "rows": 147702,
+ "brier_raw": 0.14079596149695423,
+ "brier_calibrated": 0.14552025591707507,
+ "check_against_evaluation_json": {
+  "brier_raw": 0.0,
+  "brier_calibrated": 0.0,
+  "test_rows": 0
+ }
+}
