@@ -3,6 +3,10 @@
     phishguard train     [--sample-size N | --full] [--seed 42] ...   train Layer-1 models (Kaggle pipeline)
     phishguard analyze   --url URL [--no-reinforcement]                score one URL, print JSON
     phishguard evaluate  [--with-tests]                                  measure a trained run; writes verified metrics + model card
+    phishguard curves                                                   save ROC/PR points, calibration bins, feature contributions
+    phishguard figures   [--only NAME ...]                              draw every chart from the result files (docs/figures)
+    phishguard cascade   [--rescore]                                    how much slow checking Layer 1 saves when it goes first (offline)
+    phishguard baseline-llm [--record]                                  Layer 1 vs a free local LLM; replays saved answers (offline)
     phishguard evaluate-live [--phishstats N] [--tranco N]              full system with live Playwright capture (needs internet)
     phishguard snapshot-live [--phishing N] [--tranco N]               capture every eval URL once and save it (needs internet)
     phishguard replay    [--split val|test|all]                         replay a saved snapshot through the full analysis (offline)
@@ -23,6 +27,10 @@ COMMANDS = {
     "train": ("phishguard.pipelines.kaggle", "Train Layer-1 models on the Kaggle data"),
     "analyze": ("phishguard.app.dashboard", "Score one URL and print the analysis JSON"),
     "evaluate": ("phishguard.evaluation.evaluate", "Measure a trained run: every verified metric + model card"),
+    "curves": ("phishguard.evaluation.curves", "Save ROC/PR curve points, calibration bins and feature contributions"),
+    "figures": ("phishguard.evaluation.figures", "Draw every chart from the result files (light and dark SVG)"),
+    "cascade": ("phishguard.evaluation.cascade", "How much slow checking Layer 1 saves when it goes first (offline)"),
+    "baseline-llm": ("phishguard.evaluation.llm_baseline", "Layer 1 vs a free local LLM on the same URLs (replays saved answers)"),
     "evaluate-live": ("phishguard.evaluation.live", "Full system with live page capture (needs internet; runs in CI)"),
     "snapshot-live": ("phishguard.evaluation.snapshot:main_freeze", "Capture every evaluation URL once and save it (needs internet)"),
     "replay": ("phishguard.evaluation.snapshot:main_replay", "Replay a saved live snapshot through the full analysis (offline)"),

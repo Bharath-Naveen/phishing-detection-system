@@ -350,3 +350,77 @@ Largest probability differences (tolerance 1e-6): XGBoost 1.19e-7 (on 35 of 148,
 
 - Pages at 390 px and 1280 px, light and dark: no horizontal scroll on the project page, no console errors, and no network request contains the URL typed into the box (Playwright, local server). Screenshots were shared in the chat.
 - The homepage already scrolls sideways at 390 px (its hero is 453 px wide). That was already there before this change and is not touched here.
+
+---
+
+## 2026-10-02 · Phase 7: Figures drawn from the result files
+
+**Goal.** Charts for the README and the website that cannot drift from the tables. Branch `phase7/figures`.
+
+### What was built
+
+- **`phishguard curves`** (`evaluation/curves.py`) re-scores the held-out test rows and writes `metrics/results/curves.json`: 201 ROC and precision-recall points per model, 10 calibration bins (raw and calibrated), a score histogram and the mean absolute XGBoost contribution of every feature. `evaluate` only kept summary numbers, so these could not be drawn before. The command refuses to write if any ROC-AUC, PR-AUC, Brier score or row count differs from `evaluation.json`.
+- **`phishguard figures`** (`evaluation/figures.py`) draws ten charts as SVG, each in a light and a dark version, into `docs/figures/`, plus `docs/figures/README.md` with the plotted values as tables. It reads only JSON result files and needs only matplotlib. Running it twice gives byte-identical files.
+- `metrics/reproduce.sh` now ends with both commands. Tests: 377 pass (4 new in `tests/test_figures.py`).
+
+| Figure | Reads |
+|---|---|
+| `rebuild_before_after` | `metrics/audit_baseline/results/06_full_run.json`, `evaluation.json` |
+| `layers_on_brand_sites`, `verdicts_by_set` | `evaluation.json`, `tuning/test_after.json` |
+| `model_comparison`, `confusion_matrix`, `architecture` | `evaluation.json` |
+| `roc_pr_curves`, `feature_contributions`, `calibration` | `curves.json` |
+| `rule_tuning` | `tuning/{val,test}_{before,after}.json` |
+
+### How curves.json was produced
+
+The full run was retrained from scratch in the cloud workspace (`phishguard train --full`, seed 42). The Kaggle file (sha256 `330901bb4fbb...`), the train file (`c70ccdbc171e...`) and the test file (`a31c6c43efea...`) all match `evaluation.json`. The curves were scored with the shipped models in `models/layer1` (bundle sha256 `9758fb0f13fd...`).
+
+### Found along the way
+
+- **Logistic regression does not reproduce `evaluation.json` exactly.** XGBoost, LightGBM and Random Forest match to the last digit (difference 0.0), and so do both Brier scores. Logistic regression, both the shipped file and a fresh refit, gives ROC-AUC 0.7734 and PR-AUC 0.6971 against 0.7731 and 0.6958 in `evaluation.json`. It is a supporting model and the gap is in the third decimal, so the charts show the `evaluation.json` values and `docs/figures/README.md` states the difference. Open item: find out why (the earlier log entry measured a smaller gap) or re-run `phishguard evaluate` so the table matches the shipped file.
+- **The model is overconfident at the top.** In the highest probability bin (28,798 test URLs, average score 0.97) 85% are phishing. This is the same weakness as the famous-homepage false alarms, now visible in the calibration chart.
+- **Popular homepages.** 15 of 76 are called phishing by the full system, 8 of them pages that failed to load. The chart title was written to say brand sites are mostly cleared, not that false alarms are rare everywhere.
+- **`path_length` dominates.** Its mean contribution (1.00 log-odds) is more than twice the next feature (`num_digits`, 0.42). The top 12 of 54 features carry 88% of the total.
+
+
+---
+
+## 2026-10-04 · Phase 8: Comparisons against something that already exists
+
+**Goal.** Numbers that show the system next to an existing alternative on cost, time and simplicity, that anyone can regenerate on their own PC with no API key and no spend. Branch `phase8/baselines`.
+
+### What was built
+
+- **`phishguard baseline-llm`** (`evaluation/llm_baseline.py`). A free open-source LLM is the yardstick. It is asked once (`--record`, through Ollama on the local machine) and its raw answers are saved in `data/evaluation/frozen/llm_baseline_llama3_2_3b.jsonl.gz` (86 KB) with the model digest, Ollama version, prompt, options, hardware and data hashes. The default command replays that file offline and writes `metrics/results/llm_baseline.json`. Same pattern as the frozen live snapshot.
+- **`phishguard cascade`** (`evaluation/cascade.py`). Arithmetic on saved scores: for ten band widths, what share of URLs Layer 1 settles alone, how often it is wrong on those, and the time per URL that follows from the measured latencies. `--rescore` rebuilds `metrics/results/heldout_scores.csv.gz` (label, raw and calibrated score for all 147,702 held-out rows, 584 KB) and stops if the Brier scores or row count differ from `evaluation.json`. With the LLM recording present it also reports the real end-to-end result of "Layer 1 first, LLM only for the unsure ones".
+- Both render into `metrics/VERIFIED_METRICS.md`, both are in `metrics/reproduce.sh`, and the README has a "Compared with an existing tool" section. Tests: 385 pass (8 new in `tests/test_baselines.py`, two of which check that the committed result files are exactly what the committed inputs produce).
+
+### Rules fixed before the recording
+
+Seeded simple random sample of the held-out rows (seed 42, 2,000 URLs), one zero-shot prompt at temperature 0 that is not edited after seeing answers, answers that are neither "phishing" nor "legitimate" count as legitimate, Layer 1 judged at the app threshold. The LLM saw the canonical URL, cut at 500 characters.
+
+### Results
+
+Recording: llama3.2:3b (2.0 GB, digest `a80c4f17acd5`), Ollama 0.35.1, 2-core Intel Xeon @ 2.10GHz, CPU only, about 25 minutes. Layer 1 was timed in the same run on the same machine.
+
+| Same 2,000 URLs (929 phishing) | Precision | Recall | F1 (95% CI) | False-positive rate | Time per URL p50 / p95 |
+|---|---|---|---|---|---|
+| Layer 1 | 0.752 | 0.860 | 0.802 (0.783 to 0.822) | 24.6% | 11.4 ms / 15.5 ms |
+| llama3.2:3b zero-shot | 0.868 | 0.501 | 0.635 (0.606 to 0.664) | 6.6% | 742 ms / 1,447 ms |
+
+F1 difference +0.167 (paired bootstrap 95% CI +0.134 to +0.202). The LLM took 65 times as long per URL. 8 of 2,000 answers were neither word.
+
+Cascade on all 147,702 held-out rows: with an unsure band of 0.30 to 0.70, 19.9% of URLs go to the slow step and Layer 1 is wrong on 13.9% of the rest. End to end with the recorded LLM at that band: FPR 16.1% (from 24.6%), recall 0.770 (from 0.860), F1 0.787 (from 0.802), 81.6% of LLM calls avoided, 5.4 times faster than the LLM on everything.
+
+### What the numbers taught us (honest notes)
+
+- **The LLM is the more careful one.** It beats Layer 1 on precision and false alarms and loses badly on recall. "Layer 1 is better" is true for F1 and recall, not across the board.
+- **The cascade does not raise F1.** Sending unsure URLs to this LLM trades recall for fewer false alarms. No band beats plain Layer 1 by more than 0.003 F1, and wide bands are worse. The defensible claim is speed and fewer false alarms.
+- **Layer 1 is not clean even where it is sure.** With the widest band (0.05 to 0.95) it is still wrong on 9.9% of what it settles. This is the overconfidence already seen in the calibration chart, and it caps what any cascade built on this model can do.
+- **This is one small model and one prompt.** Published work reports F1 near 0.88 for large hosted models zero-shot on a different, easier dataset. Nothing here measures those.
+- **The time columns mix machines.** The cascade estimate uses Layer 1's 15.7 ms from `evaluation.json`, the LLM's 742 ms from this recording and the 6.8 s capture time from a GitHub runner. The LLM comparison itself is same-machine.
+
+### Found along the way
+
+- **The held-out file's hash differs in this workspace** (`360c30d2cc89...` against `a31c6c43efea...` in `evaluation.json`), with the same 147,714 rows, the same 147,702 scored rows and Brier scores identical to the last digit. tldextract here is 5.4.0 (5.3.2 in the published run) and it fetches the current public suffix list, the drift already noted in Phase 6. Not investigated further; pinning tldextract and its suffix list would remove it.
+- A full-suite run needs no Ollama: the tests only replay.

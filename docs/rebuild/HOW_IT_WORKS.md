@@ -51,7 +51,7 @@ Entry point: `phishguard train` (default 50,000-row sample; `--full` for all row
 
 ## Part 4: Verified numbers
 
-`phishguard evaluate` reads a trained run and writes every number with its command, commit, data hash and environment: `metrics/results/evaluation.json` (raw), `metrics/VERIFIED_METRICS.md` (readable) and `docs/MODEL_CARD.md`. `metrics/reproduce.sh` retrains and re-evaluates from scratch (about 25 minutes). `phishguard evaluate-live` (run by `.github/workflows/live-capture.yml`) adds the full system with live page capture. CI (`.github/workflows/ci.yml`) runs the tests, a CLI smoke test and a Docker build on every push. Only numbers from these files go on a resume or website. The pre-rebuild audit lives in `metrics/audit_baseline/` and must not be quoted for the current system.
+`phishguard evaluate` reads a trained run and writes every number with its command, commit, data hash and environment: `metrics/results/evaluation.json` (raw), `metrics/VERIFIED_METRICS.md` (readable) and `docs/MODEL_CARD.md`. `metrics/reproduce.sh` retrains and re-evaluates from scratch (about 25 minutes). `phishguard evaluate-live` (run by `.github/workflows/live-capture.yml`) adds the full system with live page capture. CI (`.github/workflows/ci.yml`) runs the tests, a CLI smoke test and a Docker build on every push. `phishguard baseline-llm` and `phishguard cascade` add two comparisons that run offline from files in the repo: Layer 1 against a free local LLM on the same 2,000 held-out URLs (saved answers, replayed), and how much slow checking Layer 1 saves as a first filter. Only numbers from these files go on a resume or website. The pre-rebuild audit lives in `metrics/audit_baseline/` and must not be quoted for the current system.
 
 ## Part 5: Code map
 

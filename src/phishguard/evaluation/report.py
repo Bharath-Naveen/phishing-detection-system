@@ -114,6 +114,72 @@ def tuning_section(t: Dict[str, Any]) -> List[str]:
     return L
 
 
+def _load_json(name: str):
+    import json
+
+    from phishguard.paths import project_root
+
+    p = project_root() / "metrics" / "results" / name
+    return json.loads(p.read_text(encoding="utf-8")) if p.is_file() else None
+
+
+def baseline_section(lb: Dict[str, Any]) -> List[str]:
+    rec, l1, llm, d = lb["recording"], lb["layer1"], lb["llm"], lb["layer1_minus_llm_f1"]
+    gb = (rec.get("model_size_bytes") or 0) / 1e9
+    L = ["", "## Layer 1 against a free local LLM (same URLs, same machine)", "",
+         f"From `phishguard baseline-llm`, which replays saved answers with no network and no API key. The LLM is a yardstick, "
+         f"not part of the product. `{rec['model']}` ({gb:.1f} GB download, run with Ollama {rec.get('ollama_version')}) was asked once, "
+         f"on {rec['recorded_utc'][:10]}, about a seeded random sample of {lb['sample']['n']:,} held-out test URLs "
+         f"({lb['sample']['phishing']:,} phishing). Zero-shot, temperature 0, one fixed prompt that was not edited after seeing answers. "
+         f"Hardware for both: {rec.get('hardware')}. Recording: `{lb['recording_file']}` (sha256 `{lb['recording_sha256'][:12]}`). "
+         "Raw values: `metrics/results/llm_baseline.json`.", ""]
+    row = lambda name, m: [name, f3(m["precision"]), f3(m["recall"]), f3(m["f1"]), f"{m['f1_ci95'][0]:.3f} to {m['f1_ci95'][1]:.3f}",  # noqa: E731
+                           pct(m["false_positive_rate"]), f"{m['latency_ms']['p50']:,.1f} ms", f"{m['latency_ms']['p95']:,.1f} ms"]
+    L += _table(["", "Precision", "Recall", "F1", "F1 95% CI", "FPR", "Time per URL p50", "p95"],
+                [row("Layer 1 (app threshold)", l1), row(f"{rec['model']}, zero-shot", llm)])
+    ag = lb["agreement"]
+    L += ["", f"F1 difference (Layer 1 minus LLM): {d['difference']:+.3f}, 95% CI {d['ci95'][0]:+.3f} to {d['ci95'][1]:+.3f} "
+              f"(paired bootstrap, {d['n_boot']:,} resamples). The LLM took {lb['speed']['llm_over_layer1_p50']:,.0f} times as long per URL (medians). "
+              f"Both right on {ag['both_right']:,} URLs, only Layer 1 right on {ag['only_layer1_right']:,}, only the LLM right on {ag['only_llm_right']:,}, "
+              f"both wrong on {ag['both_wrong']:,}. LLM answers that were neither word: {llm['unparsed_answers']} (counted as legitimate).",
+          "", "This is one small open model with one prompt. It says nothing about larger hosted models, which published work puts higher on other datasets."]
+    return L
+
+
+def cascade_section(cs: Dict[str, Any]) -> List[str]:
+    lat = cs["latencies_used"]
+    slow = lat["slow_steps"]
+    L = ["", "## Layer 1 as a first filter (cascade)", "",
+         f"From `phishguard cascade`: arithmetic on the saved scores of all {cs['rows']:,} held-out test URLs (`metrics/results/{cs['scores_file']}`), no network. "
+         "Layer 1 settles a URL when its calibrated score is outside the band; URLs inside the band go to a slow second step. "
+         "Every band is shown and none is picked as the operating point, because picking one from these rows would be choosing on the test set. "
+         "Raw values: `metrics/results/cascade.json`.", ""]
+    head = ["Unsure band", "Sent to slow step", "Slow calls avoided", "Layer 1 wrong on what it settles", "Phishing waved through", "Legitimate blocked outright"]
+    names = {"live_page_capture": "page capture", "local_llm": "local LLM"}
+    head += [f"Time per URL with {names.get(k, k)}" for k in slow]
+    rows = []
+    for b in cs["bands"]:
+        r = [f"{b['band'][0]:.2f} to {b['band'][1]:.2f}" if b["band"][0] < 0.5 else "none (Layer 1 decides all)",
+             pct(b["share_sent_to_slow_step"]), pct(b["share_settled_by_layer1"]), pct(b["settled"]["error_rate"]),
+             pct(b["share_of_all_phishing_waved_through"]), pct(b["share_of_all_legitimate_blocked_outright"])]
+        r += [f"{b['time'][k]['ms_per_url']:,.0f} ms" for k in slow]
+        rows.append(r)
+    L += _table(head, rows)
+    L += ["", f"Time per URL = Layer 1 p50 ({lat['layer1_p50_ms']:.1f} ms) + share sent on x slow step p50 ("
+              + "; ".join(f"{names.get(k, k)} {v['p50_ms']:,.0f} ms, {v['note']}" for k, v in slow.items())
+              + "). An estimate from measured medians. \"Phishing waved through\" and \"legitimate blocked outright\" are shares of all phishing / all legitimate test URLs that Layer 1 gets wrong without a second look."]
+    w = cs.get("with_recorded_llm")
+    if w:
+        L += ["", f"**Measured end to end with the recorded LLM** ({w['model']}, {w['n']:,} URLs): Layer 1 answers first and the LLM's saved answer is used only inside the band. "
+                  f"LLM on every URL: F1 {w['llm_on_everything']['f1']:.3f} at {w['llm_on_everything']['ms_per_url_mean']:,.0f} ms per URL (mean).", ""]
+        L += _table(["Unsure band", "LLM calls avoided", "Precision", "Recall", "F1", "FPR", "Time per URL (mean, measured)", "Faster than LLM on everything"],
+                    [[f"{b['band'][0]:.2f} to {b['band'][1]:.2f}" if b["band"][0] < 0.5 else "none (Layer 1 decides all)",
+                      pct(b["measured_time"]["llm_calls_avoided"]), f3(b["end_to_end"]["precision"]), f3(b["end_to_end"]["recall"]), f3(b["end_to_end"]["f1"]),
+                      pct(b["end_to_end"]["false_positive_rate"]), f"{b['measured_time']['ms_per_url_mean']:,.0f} ms",
+                      f"{b['measured_time']['times_faster_than_llm_on_everything']:,.1f}x"] for b in w["bands"]])
+    return L
+
+
 def render_verified(r: Dict[str, Any]) -> str:
     p = r["provenance"]
     env = p["environment"]
@@ -217,6 +283,11 @@ def render_verified(r: Dict[str, Any]) -> str:
     tuning = _load_tuning()
     if tuning:
         L += tuning_section(tuning)
+    lb, cs = _load_json("llm_baseline.json"), _load_json("cascade.json")
+    if lb:
+        L += baseline_section(lb)
+    if cs:
+        L += cascade_section(cs)
     L += ["", "## Earlier baseline", "",
           "The pre-rebuild audit (leaky split, scheme artifact, stale calibrator) is kept for comparison in `metrics/audit_baseline/` and at git tag `audit-baseline-2026-09-29`. Its numbers describe the old code and must not be quoted for the current system.", ""]
     return "\n".join(L)
